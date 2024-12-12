@@ -1,6 +1,7 @@
 from flask import Flask, send_file, jsonify
 import datetime
 import requests
+import pytz
 from io import BytesIO
 import traceback
 import sys
@@ -10,7 +11,8 @@ app = Flask(__name__)
 @app.route('/calendar')
 def get_calendar_image():
     try:
-        today = datetime.date.today()
+        tz = pytz.timezone('Asia/Shanghai')
+        today = datetime.now(tz)
         year = today.year
         month = today.month
         day = today.day
