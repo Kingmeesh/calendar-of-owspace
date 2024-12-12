@@ -7,7 +7,7 @@ import sys
 
 app = Flask(__name__)
 
-@app.route('/api/calendar')
+@app.route('/calendar')
 def get_calendar_image():
     try:
         today = datetime.date.today()
