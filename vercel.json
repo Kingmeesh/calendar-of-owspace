@@ -8,7 +8,7 @@
   ],
   "routes": [
     {
-      "src": "/api/calendar",
+      "src": "/calendar",
       "dest": "api/index.py"
     }
   ]
