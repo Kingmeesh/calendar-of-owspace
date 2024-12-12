@@ -5,7 +5,7 @@ from io import BytesIO
 
 app = Flask(__name__)
 
-@app.route('/calendar')
+@app.route('/api/calendar')  # 注意这里添加了 /api 前缀
 def get_calendar_image():
     # 获取今天的日期
     today = datetime.date.today()
@@ -24,5 +24,6 @@ def get_calendar_image():
     else:
         return "Failed to fetch image", 500
 
-# Vercel 直接使用 app 作为入口
-app
+# Vercel 要求的入口函数
+def handler(event, context):
+    return app
