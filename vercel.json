@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "calendar/api/app.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/calendar/api/(.*)",
+      "dest": "calendar/api/app.py"
+    }
+  ]
+}
