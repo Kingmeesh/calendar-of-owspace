@@ -11,8 +11,5 @@
       "src": "/calendar",
       "dest": "api/index.py"
     }
-  ],
-  "environment": {
-    "TZ": "Asia/Shanghai"
-  }
+  ]
 }
