@@ -12,7 +12,7 @@
       "dest": "api/index.py"
     }
   ],
-  "env": {
+  "environment": {
     "TZ": "Asia/Shanghai"
   }
 }
