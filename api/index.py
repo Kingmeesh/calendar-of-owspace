@@ -7,7 +7,7 @@ import sys
 
 app = Flask(__name__)
 
-@app.route('/calendar')
+@app.route('/')
 def get_calendar_image():
     try:
         today = datetime.utcnow() + timedelta(hours=8)
