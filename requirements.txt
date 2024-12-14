@@ -1,4 +1,5 @@
 flask
 flask-compress
 requests
+flask-caching
 gunicorn
