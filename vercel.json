@@ -12,5 +12,15 @@
       "dest": "index.py"
     }
   ],
-  "command": "gunicorn -w 4 -k sync index:app"
+  "env": {
+    "PORT": "8080"
+  },
+  "build": {
+    "env": {
+      "FLASK_ENV": "production"
+    }
+  },
+  "commands": {
+    "start": "gunicorn -b 0.0.0.0:$PORT index:app"
+  }
 }
