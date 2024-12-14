@@ -3,57 +3,50 @@ from flask_caching import Cache
 from datetime import datetime, timedelta
 import requests
 from io import BytesIO
-import logging
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+import traceback
+import sys
 
 app = Flask(__name__)
-cache = Cache(config={'CACHE_TYPE': 'simple'})
-cache.init_app(app)
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# 配置缓存，使用简单内存缓存（适用于小型应用）
+cache_config = {"CACHE_TYPE": "SimpleCache"}
+app.config.from_mapping(cache_config)
+cache = Cache(app)
 
-def get_with_retry(url, timeout=10):
-    session = requests.Session()
-    retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
-    session.mount('https://', HTTPAdapter(max_retries=retries))
-    return session.get(url, timeout=timeout)
-
-def generate_image_url():
-    today = datetime.utcnow() + timedelta(hours=8)
-    return f'https://img.owspace.com/Public/uploads/Download/{today.year}/{today.month:02d}{today.day:02d}.jpg'
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    logger.error("Unexpected error", exc_info=True)
-    return jsonify({"error": "Internal server error", "exception": str(e)}), 500
-
-@cache.cached(timeout=86400)
 @app.route('/')
+@cache.cached(timeout=3600)  # 缓存一小时
 def get_calendar_image():
     try:
-        image_url = generate_image_url()
-        logger.info(f"Attempting to fetch image from: {image_url}")
-        response = get_with_retry(image_url)
+        # 获取当前日期（UTC + 8）
+        today = datetime.utcnow() + timedelta(hours=8)
+        year = today.year
+        month = today.month
+        day = today.day
         
+        # 构造图片URL
+        image_url = f'https://img.owspace.com/Public/uploads/Download/{year}/{month:02d}{day:02d}.jpg'
+        print(f"Attempting to fetch image from: {image_url}")
+        
+        # 请求远程图片
+        response = requests.get(image_url, timeout=10)
         if response.status_code == 200:
-            return send_file(
-                BytesIO(response.content),
-                mimetype='image/jpeg',
-                as_attachment=True,
-                attachment_filename=f'calendar_{datetime.utcnow().strftime("%Y_%m_%d")}.jpg'
-            )
+            return send_file(BytesIO(response.content), mimetype='image/jpeg')
         else:
-            logger.error(f"Failed to fetch image: {response.status_code}")
-            return jsonify({"error": "Failed to fetch image", "status_code": response.status_code}), 500
-    except requests.RequestException as req_err:
-        logger.error("Request error", exc_info=True)
-        return jsonify({"error": "Request failed", "details": str(req_err)}), 500
+            return jsonify({
+                "error": "Failed to fetch image",
+                "status_code": response.status_code,
+                "url": image_url
+            }), 500
 
-@app.route('/health')
-def health_check():
-    return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        error_message = traceback.format_exc()
+        print("Unexpected error:", error_message)
+        return jsonify({
+            "error": "Internal server error",
+            "exception": str(e),
+            "traceback": error_message
+        }), 500
 
+# Vercel 直接处理 Flask 应用
 if __name__ == '__main__':
     app.run(debug=True)
