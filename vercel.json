@@ -11,16 +11,5 @@
       "src": "/(.*)",
       "dest": "index.py"
     }
-  ],
-  "env": {
-    "PORT": "8080"
-  },
-  "build": {
-    "env": {
-      "FLASK_ENV": "production"
-    }
-  },
-  "commands": {
-    "start": "gunicorn -b 0.0.0.0:$PORT index:app"
-  }
+  ]
 }
