@@ -1,4 +1,3 @@
 flask
 requests
-gunicorn
-flask-caching
+flask_caching
