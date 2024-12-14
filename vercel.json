@@ -2,27 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "index.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "index.py"
-    }
-  ],
-  "functions": {
-    "index.py": {
-      "runtime": "python3.9"
-    }
-  },
-  "headers": [
-    {
-      "source": "/",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, s-maxage=60, stale-while-revalidate=30" }
-      ]
+      "dest": "api/index.py"
     }
   ]
 }
