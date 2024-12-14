@@ -2,14 +2,15 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.py",
+      "src": "index.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "api/index.py"
+      "dest": "index.py"
     }
-  ]
+  ],
+  "command": "gunicorn -w 4 -k sync index:app"  // 使用 Gunicorn 提高性能
 }
