@@ -12,5 +12,5 @@
       "dest": "index.py"
     }
   ],
-  "command": "gunicorn -w 4 -k sync index:app"  // 使用 Gunicorn 提高性能
+  "command": "gunicorn -w 4 -k sync index:app"
 }
