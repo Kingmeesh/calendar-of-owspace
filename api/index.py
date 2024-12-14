@@ -64,5 +64,6 @@ def get_calendar_image():
         # 处理任何异常并返回错误信息
         return jsonify({"error": "Internal server error", "message": str(e)}), 500
 
+# Vercel 直接处理Flask应用
 if __name__ == '__main__':
     app.run(debug=True)
