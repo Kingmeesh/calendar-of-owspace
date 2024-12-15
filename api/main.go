@@ -25,7 +25,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Content-Type", "image/jpg")
 	io.Copy(w, resp.Body)
 }
 
