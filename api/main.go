@@ -9,11 +9,11 @@ import (
 func Handler(w http.ResponseWriter, r *http.Request) {
 	location, _ := time.LoadLocation("Asia/Shanghai")
 	today := time.Now().In(location)
-	
+
 	imageURL := fmt.Sprintf(
-		"https://img.owspace.com/Public/uploads/Download/%d/%02d%02d.jpg", 
-		today.Year(), 
-		today.Month(), 
+		"https://img.owspace.com/Public/uploads/Download/%d/%02d%02d.jpg",
+		today.Year(),
+		today.Month(),
 		today.Day(),
 	)
 
@@ -22,4 +22,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(fmt.Sprintf(`{"image_url": "%s"}`, imageURL)))
 }
 
-func main() {}
+func main() {
+	http.HandleFunc("/", Handler)
+	http.ListenAndServe(":8080", nil) // Listen on port 8080
+}
