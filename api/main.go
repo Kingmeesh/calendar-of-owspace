@@ -1,90 +1,101 @@
 package handler
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
-	"io/ioutil"
-	"strings"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-const cacheDir = "./cache/"
+const (
+	bucketName = "your-vercel-blob-bucket-name"
+	region     = "us-east-1"
+)
 
-func getCacheFilePath(date string) string {
-	return fmt.Sprintf("%s/%s.jpg", cacheDir, date)
+func createS3Session() *session.Session {
+	return session.Must(session.NewSession(&aws.Config{
+		Region:      aws.String(region),
+		Credentials: credentials.NewStaticCredentials(
+			"your-vercel-access-key", 
+			"your-vercel-secret-key", 
+			""),
+	}))
 }
 
-func downloadImage(imageURL string, cachePath string) error {
+func downloadImage(imageURL string) ([]byte, error) {
 	resp, err := http.Get(imageURL)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	out, err := os.Create(cachePath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
+	return io.ReadAll(resp.Body)
+}
 
-	_, err = io.Copy(out, resp.Body)
+func uploadToS3(sess *session.Session, key string, data []byte) error {
+	svc := s3.New(sess)
+
+	_, err := svc.PutObject(&s3.PutObjectInput{
+		Bucket:      aws.String(bucketName),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String("image/jpeg"),
+	})
+
 	return err
+}
+
+func getFromS3(sess *session.Session, key string) ([]byte, error) {
+	svc := s3.New(sess)
+
+	result, err := svc.GetObject(&s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer result.Body.Close()
+
+	return io.ReadAll(result.Body)
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
 	location, _ := time.LoadLocation("Asia/Shanghai")
 	today := time.Now().In(location)
-	dateStr := fmt.Sprintf("%d%02d%02d", today.Year(), today.Month(), today.Day())
 
-	cachePath := getCacheFilePath(dateStr)
+	key := fmt.Sprintf("%d%02d%02d.jpg", today.Year(), today.Month(), today.Day())
+	sess := createS3Session()
 
-	if _, err := os.Stat(cachePath); err == nil {
-		file, err := os.Open(cachePath)
-		if err != nil {
-			http.Error(w, "Failed to open cached image", http.StatusInternalServerError)
-			return
-		}
-		defer file.Close()
+	imageData, err := getFromS3(sess, key)
+	if err == nil {
 		w.Header().Set("Content-Type", "image/jpeg")
-		io.Copy(w, file)
+		w.Write(imageData)
 		return
 	}
 
 	imageURL := fmt.Sprintf(
 		"https://img.owspace.com/Public/uploads/Download/%d/%02d%02d.jpg",
-		today.Year(),
-		today.Month(),
-		today.Day(),
+		today.Year(), today.Month(), today.Day(),
 	)
 
-	err := downloadImage(imageURL, cachePath)
+	imageData, err = downloadImage(imageURL)
 	if err != nil {
-		http.Error(w, "Failed to fetch image", http.StatusInternalServerError)
+		http.Error(w, "Failed to download image", http.StatusInternalServerError)
 		return
 	}
 
-	file, err := os.Open(cachePath)
+	err = uploadToS3(sess, key, imageData)
 	if err != nil {
-		http.Error(w, "Failed to open downloaded image", http.StatusInternalServerError)
-		return
+		fmt.Println("Failed to upload to S3:", err)
 	}
-	defer file.Close()
 
 	w.Header().Set("Content-Type", "image/jpeg")
-	io.Copy(w, file)
-}
-
-func main() {
-	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
-		err := os.Mkdir(cacheDir, 0755)
-		if err != nil {
-			fmt.Println("Failed to create cache directory:", err)
-			return
-		}
-	}
-
-	http.HandleFunc("/", Handler)
-	http.ListenAndServe(":8080", nil)
+	w.Write(imageData)
 }
