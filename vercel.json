@@ -8,7 +8,7 @@
   ],
   "functions": {
     "php/index.php": {
-      "runtime": "vercel-php-runtime"
+      "runtime": "vercel-php-runtime@1.0.0"
     }
   }
 }
