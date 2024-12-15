@@ -2,14 +2,17 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/main.go",
-      "use": "@vercel/go"
+      "src": "api/index.py",
+      "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "api/main.go"
+      "dest": "api/index.py",
+      "headers": {
+        "Cache-Control": "public, max-age=86400, s-maxage=43200, stale-while-revalidate=43200"
+      }
     }
   ]
 }
