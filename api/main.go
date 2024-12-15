@@ -17,12 +17,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		today.Day(),
 	)
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(fmt.Sprintf(`{"image_url": "%s"}`, imageURL)))
+	http.Redirect(w, r, imageURL, http.StatusMovedPermanently)
 }
 
 func main() {
 	http.HandleFunc("/", Handler)
-	http.ListenAndServe(":8080", nil) // Listen on port 8080
+	http.ListenAndServe(":8080", nil)
 }
