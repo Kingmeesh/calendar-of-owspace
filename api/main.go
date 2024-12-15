@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -17,7 +18,15 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		today.Day(),
 	)
 
-	http.Redirect(w, r, imageURL, http.StatusMovedPermanently)
+	resp, err := http.Get(imageURL)
+	if err != nil {
+		http.Error(w, "Failed to fetch image", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	io.Copy(w, resp.Body)
 }
 
 func main() {
