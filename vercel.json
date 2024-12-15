@@ -1,14 +1,15 @@
 {
   "version": 2,
+  "builds": [
+    {
+      "src": "api/main.go",
+      "use": "@vercel/go"
+    }
+  ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/php/index.php"
+      "dest": "/api/main.go"
     }
-  ],
-  "functions": {
-    "php/index.php": {
-      "runtime": "vercel-php-runtime@1.0.0"
-    }
-  }
+  ]
 }
