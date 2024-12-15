@@ -2,7 +2,7 @@
   "version": 2,
   "functions": {
     "api/main.go": {
-      "runtime": "go1.x"
+      "runtime": "go1.21.x"
     }
   },
   "routes": [
