@@ -21,7 +21,6 @@ def resize_image(image_data, target_ratio=(9, 10)):
     img = Image.open(BytesIO(image_data))
     width, height = img.size
 
-    # 计算目标尺寸
     target_width = min(width, int(height * target_ratio[0] / target_ratio[1]))
     target_height = min(height, int(width * target_ratio[1] / target_ratio[0]))
 
