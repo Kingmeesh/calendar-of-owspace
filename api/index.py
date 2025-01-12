@@ -34,7 +34,7 @@ def crop_and_resize_image(image_data):
 
     # 计算目标尺寸：缩放为9:10的比例
     target_width = 9 * 100  # 目标宽度为900像素
-    target_height = 10 * 100  # 目标高度为1000像素
+    target_height = 10.5 * 100  # 目标高度为1000像素
 
     # 缩放图片
     img_resized = img_cropped.resize((target_width, target_height), Image.Resampling.LANCZOS)
