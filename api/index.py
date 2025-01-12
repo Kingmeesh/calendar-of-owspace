@@ -1,6 +1,6 @@
 from flask import Flask, send_file, jsonify
 from flask_caching import Cache
-from datetime import datetime, timedelta
+from datetime import datetime
 from pytz import timezone
 import requests
 from io import BytesIO
@@ -72,21 +72,20 @@ def get_calendar_image():
 
         response = requests.get(image_url, timeout=10)
         if response.status_code == 200:
-            # 裁剪、缩放并提高清晰度
+            # 裁剪、缩放并优化图片
             processed_image = crop_and_resize_image(response.content)
             cache.set(cache_key, processed_image, timeout=86400)  # 缓存图片，最多缓存一天
             cache.set(cache_date_key, f"{year}-{month:02d}-{day:02d}", timeout=86400)  # 缓存日期
             return send_file(BytesIO(processed_image), mimetype='image/jpeg')
         else:
-            # 回退到前一天的图片
-            fallback_date = today - timedelta(days=1)
-            fallback_url = f'https://img.owspace.com/Public/uploads/Download/{fallback_date.year}/{fallback_date.month:02d}{fallback_date.day:02d}.jpg'
-            print(f"Fallback to previous day: {fallback_url}")
-            response = requests.get(fallback_url, timeout=10)
+            # 如果今日图片获取失败，直接返回2025年1月6日的图片
+            fixed_date_url = 'https://img.owspace.com/Public/uploads/Download/2025/0106.jpg'
+            print(f"Fallback to fixed date: {fixed_date_url}")
+            response = requests.get(fixed_date_url, timeout=10)
             if response.status_code == 200:
-                # 裁剪、缩放并提高清晰度
+                # 裁剪、缩放并优化图片
                 processed_image = crop_and_resize_image(response.content)
-                cache.set(cache_key, processed_image, timeout=86400)  # 缓存回退图片
+                cache.set(cache_key, processed_image, timeout=86400)  # 缓存固定日期的图片
                 cache.set(cache_date_key, f"{year}-{month:02d}-{day:02d}", timeout=86400)  # 更新日期为今天
                 return send_file(BytesIO(processed_image), mimetype='image/jpeg')
             else:
