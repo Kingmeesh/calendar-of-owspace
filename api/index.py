@@ -1,6 +1,6 @@
 from flask import Flask, send_file, jsonify
 from flask_caching import Cache
-from datetime import datetime, timedelta
+from datetime import datetime
 from pytz import timezone
 import requests
 from io import BytesIO
@@ -41,13 +41,11 @@ def get_calendar_image():
             cache.set(cache_date_key, f"{year}-{month:02d}-{day:02d}", timeout=86400)  # 缓存日期
             return send_file(BytesIO(response.content), mimetype='image/jpeg')
         else:
-            # 回退到前一天的图片
-            fallback_date = today - timedelta(days=1)
-            fallback_url = f'https://img.owspace.com/Public/uploads/Download/{fallback_date.year}/{fallback_date.month:02d}{fallback_date.day:02d}.jpg'
-            print(f"Fallback to previous day: {fallback_url}")
-            response = requests.get(fallback_url, timeout=10)
+            fixed_date_url = 'https://img.owspace.com/Public/uploads/Download/2024/1210.jpg'
+            print(f"Fallback to fixed date: {fixed_date_url}")
+            response = requests.get(fixed_date_url, timeout=10)
             if response.status_code == 200:
-                cache.set(cache_key, response.content, timeout=86400)  # 缓存回退图片
+                cache.set(cache_key, response.content, timeout=86400)  # 缓存固定日期的图片
                 cache.set(cache_date_key, f"{year}-{month:02d}-{day:02d}", timeout=86400)  # 更新日期为今天
                 return send_file(BytesIO(response.content), mimetype='image/jpeg')
             else:
