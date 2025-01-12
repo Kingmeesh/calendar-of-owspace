@@ -5,7 +5,7 @@ from pytz import timezone
 import requests
 from io import BytesIO
 import traceback
-from PIL import Image
+from PIL import Image  # 导入PIL库
 
 app = Flask(__name__)
 cache_config = {"CACHE_TYPE": "SimpleCache"}
@@ -17,24 +17,21 @@ def get_china_now():
     return datetime.now(china_tz)
 
 def resize_image(image_data, target_ratio=(9, 10)):
-    """将图片调整为9:10的比例"""
+    """将图片拉伸为9:10的比例"""
     img = Image.open(BytesIO(image_data))
     width, height = img.size
 
-    target_width = min(width, int(height * target_ratio[0] / target_ratio[1]))
-    target_height = min(height, int(width * target_ratio[1] / target_ratio[0]))
+    # 计算目标尺寸
+    target_width = int(height * (target_ratio[0] / target_ratio[1]))
+    target_height = height
 
-    # 计算裁剪区域
-    left = (width - target_width) / 2
-    top = (height - target_height) / 2
-    right = (width + target_width) / 2
-    bottom = (height + target_height) / 2
+    # 如果当前宽度小于目标宽度，则调整高度
+    if width < target_width:
+        target_height = int(width * (target_ratio[1] / target_ratio[0]))
+        target_width = width
 
-    # 裁剪图片
-    img_cropped = img.crop((left, top, right, bottom))
-
-    # 调整图片大小
-    img_resized = img_cropped.resize((9 * 100, 10 * 100))  # 调整为900x1000像素
+    # 拉伸图片到目标尺寸
+    img_resized = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
 
     # 将图片转换为字节流
     img_byte_arr = BytesIO()
@@ -65,7 +62,7 @@ def get_calendar_image():
 
         response = requests.get(image_url, timeout=10)
         if response.status_code == 200:
-            # 调整图片比例为9:10
+            # 拉伸图片比例为9:10
             resized_image = resize_image(response.content)
             cache.set(cache_key, resized_image, timeout=86400)  # 缓存图片，最多缓存一天
             cache.set(cache_date_key, f"{year}-{month:02d}-{day:02d}", timeout=86400)  # 缓存日期
@@ -77,7 +74,7 @@ def get_calendar_image():
             print(f"Fallback to previous day: {fallback_url}")
             response = requests.get(fallback_url, timeout=10)
             if response.status_code == 200:
-                # 调整图片比例为9:10
+                # 拉伸图片比例为9:10
                 resized_image = resize_image(response.content)
                 cache.set(cache_key, resized_image, timeout=86400)  # 缓存回退图片
                 cache.set(cache_date_key, f"{year}-{month:02d}-{day:02d}", timeout=86400)  # 更新日期为今天
