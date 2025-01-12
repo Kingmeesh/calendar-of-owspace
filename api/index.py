@@ -5,7 +5,7 @@ from pytz import timezone
 import requests
 from io import BytesIO
 import traceback
-from PIL import Image  # 导入PIL库
+from PIL import Image
 
 app = Flask(__name__)
 cache_config = {"CACHE_TYPE": "SimpleCache"}
@@ -17,7 +17,7 @@ def get_china_now():
     return datetime.now(china_tz)
 
 def crop_and_resize_image(image_data):
-    """裁剪图片并缩放为9:10的比例"""
+    """裁剪图片并缩放为9:10.5的比例"""
     img = Image.open(BytesIO(image_data))
 
     # 原始尺寸
@@ -32,9 +32,10 @@ def crop_and_resize_image(image_data):
     # 裁剪图片
     img_cropped = img.crop((left, top, right, bottom))
 
-    # 计算目标尺寸：缩放为9:10的比例
+    # 计算目标尺寸：缩放为9:10.5的比例
+    target_ratio = (9, 10.5)  # 目标比例
     target_width = 9 * 100  # 目标宽度为900像素
-    target_height = 10.5 * 100  # 目标高度为1000像素
+    target_height = int(target_width * (target_ratio[1] / target_ratio[0]))  # 根据比例计算高度
 
     # 缩放图片
     img_resized = img_cropped.resize((target_width, target_height), Image.Resampling.LANCZOS)
