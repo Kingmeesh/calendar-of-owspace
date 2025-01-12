@@ -2,4 +2,4 @@ flask
 requests
 flask_caching
 pytz
-PIL
+pillow
