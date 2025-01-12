@@ -23,11 +23,11 @@ def crop_and_resize_image(image_data):
     # 原始尺寸
     width, height = img.size
 
-    # 裁剪区域：去除左侧和右侧各55像素，上侧和下侧各63像素
+    # 裁剪区域
     left = 55
     right = width - 55
     top = 63
-    bottom = height - 63
+    bottom = height - 200
 
     # 裁剪图片
     img_cropped = img.crop((left, top, right, bottom))
