@@ -5,7 +5,7 @@ from pytz import timezone
 import requests
 from io import BytesIO
 import traceback
-from PIL import Image  # 导入PIL库
+from PIL import Image
 
 app = Flask(__name__)
 cache_config = {"CACHE_TYPE": "SimpleCache"}
