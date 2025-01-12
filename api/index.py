@@ -5,7 +5,7 @@ from pytz import timezone
 import requests
 from io import BytesIO
 import traceback
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter  # 导入PIL库
 
 app = Flask(__name__)
 cache_config = {"CACHE_TYPE": "SimpleCache"}
@@ -17,7 +17,7 @@ def get_china_now():
     return datetime.now(china_tz)
 
 def crop_and_resize_image(image_data):
-    """裁剪图片并缩放为9:10.4的比例"""
+    """裁剪图片并缩放为9:10.5的比例，调整亮度和清晰度"""
     img = Image.open(BytesIO(image_data))
 
     # 原始尺寸
@@ -32,17 +32,24 @@ def crop_and_resize_image(image_data):
     # 裁剪图片
     img_cropped = img.crop((left, top, right, bottom))
 
-    # 计算目标尺寸：缩放为9:10.4的比例
-    target_ratio = (9, 10.4)  # 目标比例
+    # 计算目标尺寸：缩放为9:10.5的比例
+    target_ratio = (9, 10.5)  # 目标比例
     target_width = 9 * 100  # 目标宽度为900像素
     target_height = int(target_width * (target_ratio[1] / target_ratio[0]))  # 根据比例计算高度
 
     # 缩放图片
     img_resized = img_cropped.resize((target_width, target_height), Image.Resampling.LANCZOS)
 
+    # 调整亮度到最低
+    enhancer = ImageEnhance.Brightness(img_resized)
+    img_low_brightness = enhancer.enhance(0)  # 亮度调整为最低（0表示完全黑色）
+
+    # 调整清晰度到最高
+    img_sharpened = img_low_brightness.filter(ImageFilter.SHARPEN)  # 提高清晰度
+
     # 将图片转换为字节流
     img_byte_arr = BytesIO()
-    img_resized.save(img_byte_arr, format='JPEG')
+    img_sharpened.save(img_byte_arr, format='JPEG')
     img_byte_arr.seek(0)
 
     return img_byte_arr.getvalue()
@@ -69,7 +76,7 @@ def get_calendar_image():
 
         response = requests.get(image_url, timeout=10)
         if response.status_code == 200:
-            # 裁剪并缩放图片
+            # 裁剪、缩放并调整亮度和清晰度
             processed_image = crop_and_resize_image(response.content)
             cache.set(cache_key, processed_image, timeout=86400)  # 缓存图片，最多缓存一天
             cache.set(cache_date_key, f"{year}-{month:02d}-{day:02d}", timeout=86400)  # 缓存日期
@@ -81,7 +88,7 @@ def get_calendar_image():
             print(f"Fallback to previous day: {fallback_url}")
             response = requests.get(fallback_url, timeout=10)
             if response.status_code == 200:
-                # 裁剪并缩放图片
+                # 裁剪、缩放并调整亮度和清晰度
                 processed_image = crop_and_resize_image(response.content)
                 cache.set(cache_key, processed_image, timeout=86400)  # 缓存回退图片
                 cache.set(cache_date_key, f"{year}-{month:02d}-{day:02d}", timeout=86400)  # 更新日期为今天
