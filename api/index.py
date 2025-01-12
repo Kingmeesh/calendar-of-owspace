@@ -16,22 +16,28 @@ def get_china_now():
     china_tz = timezone('Asia/Shanghai')
     return datetime.now(china_tz)
 
-def resize_image(image_data, target_ratio=(9, 10)):
-    """将图片拉伸为9:10的比例"""
+def crop_and_resize_image(image_data):
+    """裁剪图片并缩放为9:10的比例"""
     img = Image.open(BytesIO(image_data))
+
+    # 原始尺寸
     width, height = img.size
 
-    # 计算目标尺寸
-    target_width = int(height * (target_ratio[0] / target_ratio[1]))
-    target_height = height
+    # 裁剪区域：去除左侧和右侧各55像素，上侧和下侧各63像素
+    left = 55
+    right = width - 55
+    top = 63
+    bottom = height - 63
 
-    # 如果当前宽度小于目标宽度，则调整高度
-    if width < target_width:
-        target_height = int(width * (target_ratio[1] / target_ratio[0]))
-        target_width = width
+    # 裁剪图片
+    img_cropped = img.crop((left, top, right, bottom))
 
-    # 拉伸图片到目标尺寸
-    img_resized = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+    # 计算目标尺寸：缩放为9:10的比例
+    target_width = 9 * 100  # 目标宽度为900像素
+    target_height = 10 * 100  # 目标高度为1000像素
+
+    # 缩放图片
+    img_resized = img_cropped.resize((target_width, target_height), Image.Resampling.LANCZOS)
 
     # 将图片转换为字节流
     img_byte_arr = BytesIO()
@@ -62,11 +68,11 @@ def get_calendar_image():
 
         response = requests.get(image_url, timeout=10)
         if response.status_code == 200:
-            # 拉伸图片比例为9:10
-            resized_image = resize_image(response.content)
-            cache.set(cache_key, resized_image, timeout=86400)  # 缓存图片，最多缓存一天
+            # 裁剪并缩放图片
+            processed_image = crop_and_resize_image(response.content)
+            cache.set(cache_key, processed_image, timeout=86400)  # 缓存图片，最多缓存一天
             cache.set(cache_date_key, f"{year}-{month:02d}-{day:02d}", timeout=86400)  # 缓存日期
-            return send_file(BytesIO(resized_image), mimetype='image/jpeg')
+            return send_file(BytesIO(processed_image), mimetype='image/jpeg')
         else:
             # 回退到前一天的图片
             fallback_date = today - timedelta(days=1)
@@ -74,11 +80,11 @@ def get_calendar_image():
             print(f"Fallback to previous day: {fallback_url}")
             response = requests.get(fallback_url, timeout=10)
             if response.status_code == 200:
-                # 拉伸图片比例为9:10
-                resized_image = resize_image(response.content)
-                cache.set(cache_key, resized_image, timeout=86400)  # 缓存回退图片
+                # 裁剪并缩放图片
+                processed_image = crop_and_resize_image(response.content)
+                cache.set(cache_key, processed_image, timeout=86400)  # 缓存回退图片
                 cache.set(cache_date_key, f"{year}-{month:02d}-{day:02d}", timeout=86400)  # 更新日期为今天
-                return send_file(BytesIO(resized_image), mimetype='image/jpeg')
+                return send_file(BytesIO(processed_image), mimetype='image/jpeg')
             else:
                 return jsonify({"error": "Failed to fetch image", "url": image_url}), 500
     except Exception as e:
