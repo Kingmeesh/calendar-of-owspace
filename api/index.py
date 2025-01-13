@@ -1,4 +1,4 @@
-from flask import Flask, send_file, jsonify
+from flask import Flask, send_file, jsonify, render_template_string
 from flask_caching import Cache
 from datetime import datetime
 from pytz import timezone
@@ -60,40 +60,54 @@ def get_calendar_image():
 
         # 检查缓存的日期是否是今天
         cached_date = cache.get(cache_date_key)
-        if cached_date == f"{year}-{month:02d}-{day:02d}":
-            cached_image = cache.get(cache_key)
-            if cached_image:
-                print("Serving cached image")
-                return send_file(BytesIO(cached_image), mimetype='image/jpeg')
-
-        # 如果缓存无效或日期已更改，重新获取图片
-        image_url = f'https://img.owspace.com/Public/uploads/Download/{year}/{month:02d}{day:02d}.jpg'
-        print(f"Attempting to fetch image from: {image_url}")
-
-        response = requests.get(image_url, timeout=10)
-        if response.status_code == 200:
-            # 裁剪、缩放并优化图片
-            processed_image = crop_and_resize_image(response.content)
-            cache.set(cache_key, processed_image, timeout=86400)  # 缓存图片，最多缓存一天
-            cache.set(cache_date_key, f"{year}-{month:02d}-{day:02d}", timeout=86400)  # 缓存日期
-            return send_file(BytesIO(processed_image), mimetype='image/jpeg')
-        else:
-            # 如果今日图片获取失败，直接返回2025年1月6日的图片
-            fixed_date_url = 'https://img.owspace.com/Public/uploads/Download/2025/0106.jpg'
-            print(f"Fallback to fixed date: {fixed_date_url}")
-            response = requests.get(fixed_date_url, timeout=10)
+        if cached_date != f"{year}-{month}-{day}":
+            # 获取图片
+            image_url = f"https://example.com/calendar/{year}/{month}/{day}.jpg"  # 替换为实际的图片URL
+            response = requests.get(image_url)
             if response.status_code == 200:
-                # 裁剪、缩放并优化图片
-                processed_image = crop_and_resize_image(response.content)
-                cache.set(cache_key, processed_image, timeout=86400)  # 缓存固定日期的图片
-                cache.set(cache_date_key, f"{year}-{month:02d}-{day:02d}", timeout=86400)  # 更新日期为今天
-                return send_file(BytesIO(processed_image), mimetype='image/jpeg')
+                image_data = crop_and_resize_image(response.content)
+                cache.set(cache_key, image_data)
+                cache.set(cache_date_key, f"{year}-{month}-{day}")
             else:
-                return jsonify({"error": "Failed to fetch image", "url": image_url}), 500
+                return "Failed to fetch image", 500
+        else:
+            image_data = cache.get(cache_key)
+
+        # 返回包含图片的HTML页面
+        html_content = f"""
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>日历图片</title>
+            <style>
+                body, html {{
+                    margin: 0;
+                    padding: 0;
+                    height: 100%;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    background-color: #f0f0f0;
+                }}
+                img {{
+                    max-width: 100%;
+                    max-height: 100%;
+                    object-fit: contain;
+                }}
+            </style>
+        </head>
+        <body>
+            <img src="data:image/jpeg;base64,{image_data}" alt="日历图片">
+        </body>
+        </html>
+        """
+        return render_template_string(html_content)
+
     except Exception as e:
-        error_message = traceback.format_exc()
-        print("Unexpected error:", error_message)
-        return jsonify({"error": "Internal server error", "traceback": error_message}), 500
+        traceback.print_exc()
+        return str(e), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
