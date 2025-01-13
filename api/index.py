@@ -24,16 +24,16 @@ def crop_and_resize_image(image_data):
     width, height = img.size
 
     # 裁剪区域
-    left = 55
-    right = width - 55
-    top = 63
-    bottom = height - 200
+    left = 62
+    right = width - 62
+    top = 62
+    bottom = height - 160
 
     # 裁剪图片
     img_cropped = img.crop((left, top, right, bottom))
 
     # 计算目标尺寸：缩放为9:10.5的比例
-    target_ratio = (9, 10.5)  # 目标比例
+    target_ratio = (9, 10.4)  # 目标比例
     target_width = 9 * 100  # 目标宽度为900像素
     target_height = int(target_width * (target_ratio[1] / target_ratio[0]))  # 根据比例计算高度
 
