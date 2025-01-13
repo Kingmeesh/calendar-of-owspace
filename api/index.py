@@ -1,4 +1,4 @@
-from flask import Flask, send_file, jsonify, render_template_string
+from flask import Flask, send_file, render_template
 from flask_caching import Cache
 from datetime import datetime
 from pytz import timezone
@@ -6,6 +6,7 @@ import requests
 from io import BytesIO
 import traceback
 from PIL import Image, ImageFilter
+import base64
 
 app = Flask(__name__)
 cache_config = {"CACHE_TYPE": "SimpleCache"}
@@ -51,7 +52,7 @@ def crop_and_resize_image(image_data):
     return img_byte_arr.getvalue()
 
 @app.route('/')
-def get_calendar_image():
+def index():
     try:
         today = get_china_now()
         year, month, day = today.year, today.month, today.day
@@ -60,54 +61,57 @@ def get_calendar_image():
 
         # 检查缓存的日期是否是今天
         cached_date = cache.get(cache_date_key)
-        if cached_date != f"{year}-{month}-{day}":
-            # 获取图片
-            image_url = f"https://example.com/calendar/{year}/{month}/{day}.jpg"  # 替换为实际的图片URL
-            response = requests.get(image_url)
-            if response.status_code == 200:
-                image_data = crop_and_resize_image(response.content)
-                cache.set(cache_key, image_data)
-                cache.set(cache_date_key, f"{year}-{month}-{day}")
-            else:
-                return "Failed to fetch image", 500
+
+        if cached_date == f"{year}-{month}-{day}":
+            # 如果缓存日期是今天，直接返回缓存的图片
+            cached_image = cache.get(cache_key)
+            image_base64 = base64.b64encode(cached_image).decode('utf-8')
         else:
-            image_data = cache.get(cache_key)
+            # 如果缓存日期不是今天，重新处理图片并更新缓存
+            image_url = "https://example.com/path/to/your/image.jpg"  # 替换为实际图片URL
+            response = requests.get(image_url)
+            if response.status_code != 200:
+                return "Failed to fetch image", 500
+            image_data = response.content
+            processed_image = crop_and_resize_image(image_data)
+            cache.set(cache_key, processed_image)
+            cache.set(cache_date_key, f"{year}-{month}-{day}")
+            image_base64 = base64.b64encode(processed_image).decode('utf-8')
 
-        # 返回包含图片的HTML页面
-        html_content = f"""
-        <!DOCTYPE html>
-        <html lang="zh-CN">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>日历图片</title>
-            <style>
-                body, html {{
-                    margin: 0;
-                    padding: 0;
-                    height: 100%;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    background-color: #f0f0f0;
-                }}
-                img {{
-                    max-width: 100%;
-                    max-height: 100%;
-                    object-fit: contain;
-                }}
-            </style>
-        </head>
-        <body>
-            <img src="data:image/jpeg;base64,{image_data}" alt="日历图片">
-        </body>
-        </html>
-        """
-        return render_template_string(html_content)
-
+        return render_template('index.html', image_base64=image_base64)
     except Exception as e:
         traceback.print_exc()
-        return str(e), 500
+        return "An error occurred", 500
+
+@app.route('/image')
+def get_image():
+    try:
+        today = get_china_now()
+        year, month, day = today.year, today.month, today.day
+        cache_key = "calendar_image"
+        cache_date_key = "calendar_date"
+
+        # 检查缓存的日期是否是今天
+        cached_date = cache.get(cache_date_key)
+
+        if cached_date == f"{year}-{month}-{day}":
+            # 如果缓存日期是今天，直接返回缓存的图片
+            cached_image = cache.get(cache_key)
+            return send_file(BytesIO(cached_image), mimetype='image/jpeg')
+        else:
+            # 如果缓存日期不是今天，重新处理图片并更新缓存
+            image_url = "https://example.com/path/to/your/image.jpg"  # 替换为实际图片URL
+            response = requests.get(image_url)
+            if response.status_code != 200:
+                return "Failed to fetch image", 500
+            image_data = response.content
+            processed_image = crop_and_resize_image(image_data)
+            cache.set(cache_key, processed_image)
+            cache.set(cache_date_key, f"{year}-{month}-{day}")
+            return send_file(BytesIO(processed_image), mimetype='image/jpeg')
+    except Exception as e:
+        traceback.print_exc()
+        return "An error occurred", 500
 
 if __name__ == '__main__':
     app.run(debug=True)
