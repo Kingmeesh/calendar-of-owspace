@@ -12,29 +12,81 @@ import (
 	"os"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"golang.org/x/image/draw"
 )
 
 const (
-	fallbackURL   = "https://img.owspace.com/Public/uploads/Download/2024/1210.jpg"
-	targetWidth   = 619
-	targetHeight  = 899
-	defaultRegion = "us-east-1"
+	fallbackURL     = "https://img.owspace.com/Public/uploads/Download/2024/1210.jpg"
+	targetWidth     = 619
+	targetHeight    = 899
+	blobAPIBase     = "https://blob.vercel-storage.com"
+	downloadTimeout = 9 * time.Second // 留 1s 给 resize，确保不超 10s
 )
 
-// ---------- 图片缩放 (匹配 Python 的 LANCZOS 品质) ----------
+// ---------- Vercel Blob 客户端 (无需 AWS SDK) ----------
+
+func blobStoreID() string {
+	return os.Getenv("BLOB_STORE_ID")
+}
+
+func blobToken() string {
+	return os.Getenv("BLOB_READ_WRITE_TOKEN")
+}
+
+func blobAvailable() bool {
+	return blobStoreID() != "" && blobToken() != ""
+}
+
+func blobKey(t time.Time) string {
+	return fmt.Sprintf("%d%02d%02d.jpg", t.Year(), t.Month(), t.Day())
+}
+
+func blobPut(data []byte, key string) error {
+	url := fmt.Sprintf("%s/%s/%s", blobAPIBase, blobStoreID(), key)
+	req, err := http.NewRequest("PUT", url, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+blobToken())
+	req.Header.Set("Content-Type", "image/jpeg")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("blob put status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func blobGet(key string) ([]byte, error) {
+	url := fmt.Sprintf("%s/%s/%s", blobAPIBase, blobStoreID(), key)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+blobToken())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("blob get status %d", resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+// ---------- 图片缩放 ----------
 
 func resizeImage(data []byte) ([]byte, error) {
 	src, err := jpeg.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode image: %w", err)
 	}
-
-	// 使用 CatmullRom 插值，品质接近 Python 的 LANCZOS
 	dst := image.NewRGBA(image.Rect(0, 0, targetWidth, targetHeight))
 	draw.CatmullRom.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Over, nil)
 
@@ -48,24 +100,21 @@ func resizeImage(data []byte) ([]byte, error) {
 // ---------- 下载图片 ----------
 
 func downloadImage(imageURL string) ([]byte, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: downloadTimeout}
 	resp, err := client.Get(imageURL)
 	if err != nil {
 		return nil, fmt.Errorf("http get %s: %w", imageURL, err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status %d for %s", resp.StatusCode, imageURL)
 	}
-
 	return io.ReadAll(resp.Body)
 }
 
-// ---------- 获取今日图片（含备用回退，匹配 Python 逻辑） ----------
+// ---------- 获取今日图片（含备用回退） ----------
 
 func fetchTodayImage(today time.Time) ([]byte, string, error) {
-	// 主地址
 	primaryURL := fmt.Sprintf(
 		"https://img.owspace.com/Public/uploads/Download/%d/%02d%02d.jpg",
 		today.Year(), today.Month(), today.Day(),
@@ -81,7 +130,6 @@ func fetchTodayImage(today time.Time) ([]byte, string, error) {
 		return resized, primaryURL, nil
 	}
 
-	// 备用回退 (匹配 Python: 2024/1210.jpg)
 	log.Printf("Primary failed (%v), fallback to: %s", err, fallbackURL)
 	fallbackData, fallbackErr := downloadImage(fallbackURL)
 	if fallbackErr != nil {
@@ -95,53 +143,7 @@ func fetchTodayImage(today time.Time) ([]byte, string, error) {
 	return resized, fallbackURL, nil
 }
 
-// ---------- S3 / Vercel Blob 缓存（可选，通过环境变量启用） ----------
-
-func s3ConfigAvailable() bool {
-	return os.Getenv("VERCEL_BLOB_BUCKET") != "" &&
-		os.Getenv("VERCEL_BLOB_ACCESS_KEY") != "" &&
-		os.Getenv("VERCEL_BLOB_SECRET_KEY") != ""
-}
-
-func createS3Session() *session.Session {
-	region := os.Getenv("VERCEL_BLOB_REGION")
-	if region == "" {
-		region = defaultRegion
-	}
-	return session.Must(session.NewSession(&aws.Config{
-		Region:      aws.String(region),
-		Credentials: credentials.NewStaticCredentials(
-			os.Getenv("VERCEL_BLOB_ACCESS_KEY"),
-			os.Getenv("VERCEL_BLOB_SECRET_KEY"),
-			""),
-	}))
-}
-
-func uploadToS3(sess *session.Session, key string, data []byte) error {
-	svc := s3.New(sess)
-	_, err := svc.PutObject(&s3.PutObjectInput{
-		Bucket:      aws.String(os.Getenv("VERCEL_BLOB_BUCKET")),
-		Key:         aws.String(key),
-		Body:        bytes.NewReader(data),
-		ContentType: aws.String("image/jpeg"),
-	})
-	return err
-}
-
-func getFromS3(sess *session.Session, key string) ([]byte, error) {
-	svc := s3.New(sess)
-	result, err := svc.GetObject(&s3.GetObjectInput{
-		Bucket: aws.String(os.Getenv("VERCEL_BLOB_BUCKET")),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer result.Body.Close()
-	return io.ReadAll(result.Body)
-}
-
-// ---------- JSON 错误响应 (匹配 Python 的 jsonify) ----------
+// ---------- JSON 错误响应 ----------
 
 func jsonError(w http.ResponseWriter, msg string, status int) {
 	w.Header().Set("Content-Type", "application/json")
@@ -158,13 +160,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	today := time.Now().In(location)
-	key := fmt.Sprintf("%d%02d%02d.jpg", today.Year(), today.Month(), today.Day())
+	key := blobKey(today)
 
-	// 1) 尝试从 S3 缓存读取（如果配置了）
-	if s3ConfigAvailable() {
-		sess := createS3Session()
-		if cached, err := getFromS3(sess, key); err == nil {
-			log.Println("Serving cached image from S3")
+	// 1) 尝试从 Vercel Blob 读取缓存
+	if blobAvailable() {
+		if cached, err := blobGet(key); err == nil {
+			log.Println("Serving cached image from Vercel Blob")
 			w.Header().Set("Content-Type", "image/jpeg")
 			w.Write(cached)
 			return
@@ -179,14 +180,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3) 异步写入 S3 缓存
-	if s3ConfigAvailable() {
-		sess := createS3Session()
+	// 3) 异步写入 Blob 缓存
+	if blobAvailable() {
 		go func() {
-			if err := uploadToS3(sess, key, imageData); err != nil {
-				log.Printf("Failed to upload to S3: %v", err)
+			if err := blobPut(imageData, key); err != nil {
+				log.Printf("Failed to upload to Blob: %v", err)
 			} else {
-				log.Printf("Uploaded to S3: %s", usedURL)
+				log.Printf("Uploaded to Blob: %s", usedURL)
 			}
 		}()
 	}
