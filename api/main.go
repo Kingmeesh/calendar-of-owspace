@@ -175,7 +175,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2) 从 owspace 获取（含备用回退）
-	imageData, usedURL, err := fetchTodayImage(today)
+	imageData, _, err := fetchTodayImage(today)
 	if err != nil {
 		log.Printf("Error fetching image: %v", err)
 		jsonError(w, fmt.Sprintf("Failed to fetch image: %v", err), http.StatusInternalServerError)
