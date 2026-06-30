@@ -20,49 +20,49 @@ const (
 	targetWidth     = 619
 	targetHeight    = 899
 	blobAPIBase     = "https://blob.vercel-storage.com"
-	downloadTimeout = 9 * time.Second // 留 1s 给 resize，确保不超 10s
+	downloadTimeout = 9 * time.Second
 )
 
-// ---------- Vercel Blob 客户端 (无需 AWS SDK) ----------
-
-func blobStoreID() string {
-	return os.Getenv("BLOB_STORE_ID")
-}
+// ---------- Vercel Blob 客户端 ----------
 
 func blobToken() string {
 	return os.Getenv("BLOB_READ_WRITE_TOKEN")
 }
 
 func blobAvailable() bool {
-	return blobStoreID() != "" && blobToken() != ""
+	return blobToken() != ""
 }
 
 func blobKey(t time.Time) string {
 	return fmt.Sprintf("%d%02d%02d.jpg", t.Year(), t.Month(), t.Day())
 }
 
-func blobPut(data []byte, key string) error {
-	url := fmt.Sprintf("%s/%s/%s", blobAPIBase, blobStoreID(), key)
+func blobPut(data []byte, pathname string) error {
+	url := fmt.Sprintf("%s/%s", blobAPIBase, pathname)
 	req, err := http.NewRequest("PUT", url, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+blobToken())
 	req.Header.Set("Content-Type", "image/jpeg")
+	req.Header.Set("x-vercel-blob-access", "private")
+	req.Header.Set("x-vercel-blob-add-random-suffix", "false")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("blob put status %d", resp.StatusCode)
+		return fmt.Errorf("blob put status %d: %s", resp.StatusCode, string(body))
 	}
 	return nil
 }
 
-func blobGet(key string) ([]byte, error) {
-	url := fmt.Sprintf("%s/%s/%s", blobAPIBase, blobStoreID(), key)
+func blobGet(pathname string) ([]byte, error) {
+	url := fmt.Sprintf("%s/%s", blobAPIBase, pathname)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -74,10 +74,12 @@ func blobGet(key string) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("blob get status %d", resp.StatusCode)
+		return nil, fmt.Errorf("blob get status %d: %s", resp.StatusCode, string(body))
 	}
-	return io.ReadAll(resp.Body)
+	return body, nil
 }
 
 // ---------- 图片缩放 ----------
@@ -165,7 +167,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	// 1) 尝试从 Vercel Blob 读取缓存
 	if blobAvailable() {
 		if cached, err := blobGet(key); err == nil {
-			log.Println("Serving cached image from Vercel Blob")
+			log.Printf("Serving cached image from Vercel Blob: %s", key)
 			w.Header().Set("Content-Type", "image/jpeg")
 			w.Write(cached)
 			return
@@ -186,7 +188,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			if err := blobPut(imageData, key); err != nil {
 				log.Printf("Failed to upload to Blob: %v", err)
 			} else {
-				log.Printf("Uploaded to Blob: %s", usedURL)
+				log.Printf("Uploaded to Blob: %s", key)
 			}
 		}()
 	}
