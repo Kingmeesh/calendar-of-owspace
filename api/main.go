@@ -21,6 +21,7 @@ const (
 	targetHeight    = 899
 	blobAPIBase     = "https://blob.vercel-storage.com"
 	downloadTimeout = 9 * time.Second
+	chinaTZ         = "Asia/Shanghai"
 )
 
 // ---------- Vercel Blob 客户端 ----------
@@ -145,20 +146,57 @@ func fetchTodayImage(today time.Time) ([]byte, string, error) {
 	return resized, fallbackURL, nil
 }
 
-// ---------- JSON 错误响应 ----------
+// ---------- 刷新缓存（预拉取今日图片到 Blob） ----------
 
-func jsonError(w http.ResponseWriter, msg string, status int) {
+func handleRefresh(w http.ResponseWriter, r *http.Request) {
+	// 只允许 POST（Cron Job 使用 POST）或带有 x-vercel-cron 头的请求
+	if r.Method != "POST" && r.Header.Get("x-vercel-cron") != "1" {
+		jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	location, err := time.LoadLocation(chinaTZ)
+	if err != nil {
+		jsonError(w, "Failed to load location", http.StatusInternalServerError)
+		return
+	}
+	today := time.Now().In(location)
+	key := blobKey(today)
+
+	log.Printf("🔄 Cron refresh triggered for: %s", key)
+
+	// 从 owspace 拉取
+	imageData, usedURL, err := fetchTodayImage(today)
+	if err != nil {
+		log.Printf("❌ Cron refresh failed: %v", err)
+		jsonError(w, fmt.Sprintf("Refresh failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 同步写入 Blob（确保刷新完成再返回）
+	if blobAvailable() {
+		if err := blobPut(imageData, key); err != nil {
+			log.Printf("❌ Cron refresh: blob upload failed: %v", err)
+			jsonError(w, fmt.Sprintf("Blob upload failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		log.Printf("✅ Cron refresh: uploaded to Blob: %s (source: %s)", key, usedURL)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "ok",
+		"message": fmt.Sprintf("Cache refreshed for %s", key),
+		"source":  usedURL,
+	})
 }
 
-// ---------- Vercel Handler ----------
+// ---------- 首页（显示今日日历图片） ----------
 
-func Handler(w http.ResponseWriter, r *http.Request) {
-	location, err := time.LoadLocation("Asia/Shanghai")
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	location, err := time.LoadLocation(chinaTZ)
 	if err != nil {
-		jsonError(w, "Internal server error: load location", http.StatusInternalServerError)
+		jsonError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	today := time.Now().In(location)
@@ -195,4 +233,23 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Write(imageData)
+}
+
+// ---------- JSON 错误响应 ----------
+
+func jsonError(w http.ResponseWriter, msg string, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+// ---------- Vercel Handler ----------
+
+func Handler(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/refresh":
+		handleRefresh(w, r)
+	default:
+		handleIndex(w, r)
+	}
 }
